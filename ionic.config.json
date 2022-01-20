@@ -1,0 +1,7 @@
+{
+  "name": "customjob-app",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react"
+}

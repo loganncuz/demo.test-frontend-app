@@ -1,0 +1,206 @@
+import * as React from "react";
+import Button from "react-uwp/Button";
+import * as AntD from 'antd'; 
+import * as PropTypes from "prop-types";
+import CalendarDatePicker from "react-uwp/CalendarDatePicker";
+import AppBarButton, { DataProps as AppBarButtonProps } from "react-uwp/AppBarButton";
+import CommandBar from "react-uwp/CommandBar";
+import FloatNav from "react-uwp/FloatNav";
+import IconButton from "react-uwp/IconButton";
+import Image from "react-uwp/Image"
+//import logo from '../../../app/resources/LogoCSI.png';
+import {
+    Link,
+    Route,
+    withRouter,
+    Switch
+  } from 'react-router-dom';
+  //import '../../../app/components/uwp-design/uwp-design.css'; 
+  import { Theme as UWPThemeProvider, getTheme } from "react-uwp/Theme";
+  import background from '../../../app/resources/background/ls-64.jpg';  
+  import './Login.css';
+  import TextBox from "react-uwp/TextBox";
+  import PasswordBox from "react-uwp/PasswordBox";
+  import Icon from "react-uwp/Icon";
+  import {APIroutes} from '../../../app/routes/APIRoute';
+  import {ACCESS_TOKEN,isOnline,CONTEXT_PATH } from '../../../app/config';
+  import {utilities} from '../../../app/utilities';  
+
+const { Header, Content, Footer,  Sider } = AntD.Layout; 
+const FormItem = AntD.Form.Item;
+
+ 
+ 
+class Login extends React.Component<any,any> {
+    static contextTypes = { theme: PropTypes.object };
+    static context: { theme: ReactUWP.ThemeType };
+    constructor(props:any) {
+        super(props); 
+        this.state = { 
+            isloading: false
+         }
+        
+        //console.error("Login Constructor :"+this.props.location.pathname)
+    }
+
+    componentDidMount() {
+       // console.error("Login componentDidMount :"+this.props.location.pathname);
+       
+    }
+    render() {
+       // console.log("WRAP LOGIN",this.props)
+        const { theme } = this.context;
+        const toogleShow=this.props.visibled?"visible":"hidden"
+        
+        const AntWrappedLoginForm = AntD.Form.create()(LoginForm)
+        return (
+            <div className="login-container" style={{  visibility:toogleShow }}>
+                
+                <div className="login-content">
+                    <AntWrappedLoginForm onLogin={this.props.onLogin} {...this.props}/>
+                </div>
+            </div>
+        );
+    }
+}
+
+class LoginForm extends React.Component<any,any> {
+    static contextTypes = { theme: PropTypes.object };
+    static context: { theme: ReactUWP.ThemeType };
+     
+    constructor(props:any) {
+        super(props); 
+       //  console.log("Login LoginForm :"+this.props.form)
+        this.handleSubmit = this.handleSubmit.bind(this);
+        this.state = { 
+            isloading: false
+         }
+         
+    }
+    
+    handleLoginSuccessfull=(response,loginRequest,userFilter)=>{
+        //console.log("userFilter",userFilter)
+        if(localStorage.length===0){
+             
+          localStorage.setItem('session_expired', 'false');
+          localStorage.setItem('current_path', CONTEXT_PATH());
+          localStorage.setItem(ACCESS_TOKEN, response.accessToken);  
+          localStorage.setItem('cache_callback',JSON.stringify(''));
+          console.log("response No Session :",response,localStorage.getItem(ACCESS_TOKEN),ACCESS_TOKEN,response.accessToken);
+         }else{
+             //console.log("response Session",localStorage.getItem('current_user'))
+             localStorage.setItem('session_expired', 'false');
+             var currentUser=JSON.parse(JSON.parse(JSON.stringify(localStorage.getItem('current_user'))));
+             
+             if (isOnline){
+                 // console.log("RESPONSE ONLINE:",response);
+                  this.handleLoginSuccessfull(response,loginRequest,null); 
+              }else{ 
+                  if(currentUser!=null){ 
+                      console.log("response Session",currentUser[0].user.indexOf(loginRequest.usernameOrEmail)===-1,currentUser[0].user,loginRequest.usernameOrEmail)
+                      if(currentUser[0].user.indexOf(loginRequest.usernameOrEmail)===-1){
+                          console.log("response difference user :");
+                         localStorage.setItem('current_path', CONTEXT_PATH()); 
+                         localStorage.setItem('cache_callback',JSON.stringify(''));
+                         localStorage.setItem(ACCESS_TOKEN, response.accessToken);
+                    } 
+                  }
+              }
+              
+              
+             // console.log("response Session :",localStorage.getItem('current_path'));
+             // localStorage.setItem('current_path', '/');
+         }
+        
+       this.setState({isloading: false})
+        this.props.onLogin(userFilter);  
+    }
+    
+    handleSubmit(event) {
+        event.preventDefault();  
+        this.props.form.validateFields((err, values) => {
+            if (!err) {
+                this.setState({isloading:true})
+                const loginRequest = Object.assign({}, values);
+               // console.log("LOGIN :",err,values,this.props); 
+                APIroutes.WorkshopServices.login(loginRequest)
+                .then(response => { 
+                     console.log("RESPONSE :",response,localStorage.getItem('current_user'));
+                    const user=response
+                    if (isOnline){
+                        console.log("RESPONSE ONLINE:",response);
+                        this.handleLoginSuccessfull(response,loginRequest,null); 
+                    }else{ 
+                         const userFilter=user.default.filter(list => list.user.toLowerCase().includes(loginRequest.usernameOrEmail.toLowerCase())
+                           &&  list.password.includes(loginRequest.password)     
+                         )
+                       // console.log("RESPONSE OFFLINE:",user.default,loginRequest.usernameOrEmail,userFilter.length);
+                       if(userFilter.length>0)
+                           this.handleLoginSuccessfull(userFilter[0],loginRequest,userFilter); 
+                       else{
+                           utilities.RouteHelper.loginException(401);
+                           this.setState({isloading: false})
+                       }
+                             
+                    }
+                   // console.log("RESPONSE :",`${JSON.stringify(this.state)}`,`${JSON.stringify(this.props)}`);
+                    
+                }).catch(error => {
+                   // console.log("ERROR :",error.status);
+                    utilities.RouteHelper.loginException(error.status); 
+                    this.setState({isloading: false})
+                });
+                
+                
+            }
+            
+        })
+    }
+
+    render() {
+       // console.log("LoginForm",this.props.form);
+        const { getFieldDecorator } = this.props.form; 
+        const { theme } = this.context;
+        return (
+            <AntD.Spin spinning={this.state.isloading}> 
+                <AntD.Form onSubmit={this.handleSubmit} className="login-form">
+                    <FormItem>
+                        {getFieldDecorator('usernameOrEmail', {
+                            rules: [{ required: true, message: 'Please input your username or email!' }]
+                        ,initialValue:"admin"
+                        })(
+                            <AntD.Input     
+                            type="text" allowClear
+                            prefix={<AntD.Icon type="user" />} 
+                            size="large"
+                            name="usernameOrEmail"  
+                            placeholder="Username" style={{  background:theme.acrylicTexture60.background   }} />    
+                        )}
+                    </FormItem>                      
+                    <FormItem>
+                    {getFieldDecorator('password', {
+                        rules: [{ required: true, message: 'Please input your Password!' }]
+                    ,initialValue:"admin"
+                    })(
+                        <AntD.Input.Password  allowClear
+                            prefix={<AntD.Icon type="lock" />}
+                            size="large"
+                            name="password" 
+                            type="password"  
+                            placeholder="Password"  style={{  background:theme.acrylicTexture60.background   }} />                        
+                    )}
+                    </FormItem>
+                    <FormItem>
+                         
+                        <Button className="login-form-button"  style={{  background:theme.acrylicTexture80.background   }} 
+                            >Login</Button>
+                        {/* }Or <Link to={CONTEXT_PATH+"/signup"}>register now!</Link>*/}
+                    </FormItem>
+                </AntD.Form>
+            </AntD.Spin>
+        );
+    }
+}
+
+
+export default Login;
